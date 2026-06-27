@@ -1,0 +1,99 @@
+"""
+Windsor.ai Meta (Facebook/Instagram) Ads connector helper.
+Independent module — pulls directly from the Meta/Facebook Ads connector,
+NOT from GA4. This means numbers here should match Meta Ads Manager
+almost exactly (same source of truth), unlike the GA4-based dashboard
+which relies on UTM/session attribution and will show a gap.
+"""
+
+import requests
+import pandas as pd
+import streamlit as st
+from datetime import date, timedelta
+
+WINDSOR_KEY = "d9457cee421e35fb6dd6f37728604a86b321"
+WINDSOR_BASE = "https://connectors.windsor.ai/facebook"
+
+
+def _preset_to_dates(preset):
+    today = date.today()
+    mapping = {
+        "last_7d": (today - timedelta(days=7), today - timedelta(days=1)),
+        "last_14d": (today - timedelta(days=14), today - timedelta(days=1)),
+        "last_30d": (today - timedelta(days=30), today - timedelta(days=1)),
+        "last_90d": (today - timedelta(days=90), today - timedelta(days=1)),
+        "this_month": (today.replace(day=1), today - timedelta(days=1)),
+        "last_month": (
+            (today.replace(day=1) - timedelta(days=1)).replace(day=1),
+            today.replace(day=1) - timedelta(days=1),
+        ),
+    }
+    df, dt = mapping.get(preset, (today - timedelta(days=30), today - timedelta(days=1)))
+    return str(df), str(dt)
+
+
+def get_meta_data(fields, date_preset="last_30d", date_from=None, date_to=None, timeout=30, extra_params=None):
+    """
+    Fetch data directly from the Meta (Facebook) Ads connector on Windsor.
+
+    fields: list of Windsor field IDs (e.g. ["campaign", "spend", "clicks"])
+    extra_params: optional dict of additional query params (e.g. level, breakdowns)
+    Returns a pandas DataFrame. Empty DataFrame on any failure (never raises),
+    so the dashboard can render gracefully and show a clear error message instead.
+    """
+    if not date_from or not date_to:
+        date_from, date_to = _preset_to_dates(date_preset)
+
+    params = {
+        "api_key": WINDSOR_KEY,
+        "fields": ",".join(fields),
+        "date_from": str(date_from),
+        "date_to": str(date_to),
+    }
+    if extra_params:
+        params.update(extra_params)
+
+    try:
+        r = requests.get(WINDSOR_BASE, params=params, timeout=timeout)
+        r.raise_for_status()
+        data = r.json()
+        rows = data["data"] if isinstance(data, dict) and "data" in data else (data if isinstance(data, list) else [])
+        if not rows:
+            return pd.DataFrame()
+        return pd.DataFrame(rows)
+    except requests.exceptions.RequestException as e:
+        st.session_state.setdefault("_meta_api_errors", []).append(str(e))
+        return pd.DataFrame()
+    except Exception as e:
+        st.session_state.setdefault("_meta_api_errors", []).append(str(e))
+        return pd.DataFrame()
+
+
+# ── Formatting helpers ───────────────────────────────────────
+def safe_num(val, default=0):
+    try:
+        return float(val) if val is not None else default
+    except (TypeError, ValueError):
+        return default
+
+
+def fmt_currency(val, decimals=1):
+    v = safe_num(val)
+    if v >= 1_000_000:
+        return f"{v/1_000_000:.{decimals}f}M ج"
+    elif v >= 1_000:
+        return f"{v/1_000:.{decimals}f}K ج"
+    return f"{v:,.0f} ج"
+
+
+def fmt_number(val, decimals=0):
+    v = safe_num(val)
+    if v >= 1_000_000:
+        return f"{v/1_000_000:.1f}M"
+    elif v >= 1_000:
+        return f"{v/1_000:.1f}K"
+    return f"{v:,.{decimals}f}"
+
+
+def fmt_pct(val, decimals=2):
+    return f"{safe_num(val):.{decimals}f}%"
