@@ -40,16 +40,27 @@ def get_meta_data(fields, date_preset="last_30d", date_from=None, date_to=None, 
     extra_params: optional dict of additional query params (e.g. level, breakdowns)
     Returns a pandas DataFrame. Empty DataFrame on any failure (never raises),
     so the dashboard can render gracefully and show a clear error message instead.
-    """
-    if not date_from or not date_to:
-        date_from, date_to = _preset_to_dates(date_preset)
 
+    IMPORTANT: the Facebook/Meta connector on Windsor rejects date_from/date_to
+    with a 400 error (confirmed live) — it only accepts date_preset. So when no
+    explicit custom date_from/date_to is given, we send date_preset straight
+    through instead of converting it to a date range.
+    """
     params = {
         "api_key": WINDSOR_KEY,
         "fields": ",".join(fields),
-        "date_from": str(date_from),
-        "date_to": str(date_to),
     }
+
+    if date_from and date_to:
+        # Custom range explicitly requested — try date_from/date_to.
+        # (Some Windsor connectors accept this; Facebook may still reject it —
+        # the Debug panel in app.py will surface that clearly if so.)
+        params["date_from"] = str(date_from)
+        params["date_to"] = str(date_to)
+    else:
+        # Default path — confirmed working live for the Facebook connector.
+        params["date_preset"] = date_preset
+
     if extra_params:
         params.update(extra_params)
 
@@ -61,6 +72,12 @@ def get_meta_data(fields, date_preset="last_30d", date_from=None, date_to=None, 
         if not rows:
             return pd.DataFrame()
         return pd.DataFrame(rows)
+    except requests.exceptions.HTTPError as e:
+        # Surface the actual response body — this is what told us about the
+        # date_from/date_to 400 error in the first place.
+        body = e.response.text[:300] if e.response is not None else ""
+        st.session_state.setdefault("_meta_api_errors", []).append(f"{e} | body: {body}")
+        return pd.DataFrame()
     except requests.exceptions.RequestException as e:
         st.session_state.setdefault("_meta_api_errors", []).append(str(e))
         return pd.DataFrame()
