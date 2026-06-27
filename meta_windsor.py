@@ -88,8 +88,31 @@ def get_meta_data(fields, date_preset="last_30d", date_from=None, date_to=None, 
 
 # ── Formatting helpers ───────────────────────────────────────
 def safe_num(val, default=0):
+    """
+    Coerce a Windsor field value to float.
+    Some Meta action fields (e.g. purchase_roas, actions_purchase in some
+    setups) come back as a nested dict like {"omni_purchase": "1.47"} or a
+    list of such dicts instead of a plain number. This extracts the first
+    numeric value found in those cases instead of silently returning 0.
+    """
+    if val is None:
+        return default
+    if isinstance(val, (int, float)):
+        return float(val)
+    if isinstance(val, dict):
+        for v in val.values():
+            n = safe_num(v, None)
+            if n is not None:
+                return n
+        return default
+    if isinstance(val, (list, tuple)):
+        for item in val:
+            n = safe_num(item, None)
+            if n is not None:
+                return n
+        return default
     try:
-        return float(val) if val is not None else default
+        return float(val)
     except (TypeError, ValueError):
         return default
 
