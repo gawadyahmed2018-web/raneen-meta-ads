@@ -120,10 +120,10 @@ def safe_num(val, default=0):
 def fmt_currency(val, decimals=1):
     v = safe_num(val)
     if v >= 1_000_000:
-        return f"{v/1_000_000:.{decimals}f}M ج"
+        return f"${v/1_000_000:.{decimals}f}M"
     elif v >= 1_000:
-        return f"{v/1_000:.{decimals}f}K ج"
-    return f"{v:,.0f} ج"
+        return f"${v/1_000:.{decimals}f}K"
+    return f"${v:,.0f}"
 
 
 def fmt_number(val, decimals=0):
