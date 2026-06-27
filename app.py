@@ -34,10 +34,12 @@ html, body, [class*="css"] {
 .kpi-value { font-family: 'Courier New', Courier, monospace; font-size: 28px; font-weight: 800; color: #FFFFFF !important; }
 .kpi-sub { font-size: 12px; color: #CBD5E1 !important; margin-top: 4px; }
 [data-testid="stMetricValue"] { font-family: 'Courier New', Courier, monospace !important; color: #FFFFFF !important; }
-.styled-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.styled-table th { background: rgba(255,255,255,0.05); color: #64748B; font-weight: 500; font-size: 11px; text-transform: uppercase; padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.08); text-align: left; }
-.styled-table td { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.04); color: #E2E8F0; }
-.styled-table tr:hover td { background: rgba(24,119,242,0.08); }
+.styled-table { width: 100%; border-collapse: collapse; font-size: 13px; background: #0F1623; }
+.styled-table th { background: #1A2332 !important; color: #94A3B8 !important; font-weight: 700; font-size: 11px; text-transform: uppercase; padding: 12px 14px; border-bottom: 2px solid rgba(255,255,255,0.12); text-align: left; }
+.styled-table td { padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,0.06); color: #F1F5F9 !important; font-weight: 500; }
+.styled-table tr:nth-child(even) td { background: #131B29 !important; }
+.styled-table tr:nth-child(odd) td { background: #0F1623 !important; }
+.styled-table tr:hover td { background: rgba(24,119,242,0.15) !important; }
 .badge { display: inline-block; font-size: 10px; padding: 3px 9px; border-radius: 10px; font-weight: 600; }
 .badge-green { background: rgba(29,158,117,0.2); color: #1D9E75; }
 .badge-amber { background: rgba(239,159,39,0.2); color: #EF9F27; }
