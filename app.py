@@ -26,14 +26,14 @@ st.markdown("""
 html, body, [class*="css"] {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     background-color: #0A0F1C;
-    color: #E2E8F0;
+    color: #E2E8F0 !important;
 }
-.kpi-card { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 18px 22px; margin-bottom: 10px; }
+.kpi-card { background: #111827; border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; padding: 18px 22px; margin-bottom: 10px; }
 .kpi-accent { height: 3px; border-radius: 12px 12px 0 0; margin: -18px -22px 14px -22px; }
-.kpi-label { font-size: 11px; color: #64748B; letter-spacing: 0.08em; text-transform: uppercase; }
-.kpi-value { font-family: 'Courier New', Courier, monospace; font-size: 26px; font-weight: 700; color: #F1F5F9; }
-.kpi-sub { font-size: 12px; color: #94A3B8; margin-top: 4px; }
-[data-testid="stMetricValue"] { font-family: 'Courier New', Courier, monospace !important; }
+.kpi-label { font-size: 11px; color: #94A3B8 !important; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; }
+.kpi-value { font-family: 'Courier New', Courier, monospace; font-size: 28px; font-weight: 800; color: #FFFFFF !important; }
+.kpi-sub { font-size: 12px; color: #CBD5E1 !important; margin-top: 4px; }
+[data-testid="stMetricValue"] { font-family: 'Courier New', Courier, monospace !important; color: #FFFFFF !important; }
 .styled-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .styled-table th { background: rgba(255,255,255,0.05); color: #64748B; font-weight: 500; font-size: 11px; text-transform: uppercase; padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.08); text-align: left; }
 .styled-table td { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.04); color: #E2E8F0; }
@@ -153,25 +153,13 @@ def load_meta_campaigns(preset, d_from, d_to, lvl):
 df_meta, used_fallback = load_meta_campaigns(date_preset, _d_from, _d_to, level)
 
 # ─────────────────────────────────────────────
-# Debug panel — always visible at top so any field-name mismatch
-# is immediately obvious instead of silently showing zeros.
+# Guard (empty check first — normalization needs columns to exist)
 # ─────────────────────────────────────────────
-with st.expander("🔍 Debug — البيانات الراجعة من Windsor (تأكد من الـ field names)"):
-    if df_meta.empty:
+if df_meta.empty:
+    with st.expander("🔍 Debug — البيانات الراجعة من Windsor (تأكد من الـ field names)"):
         st.error("لم ترجع أي بيانات من Windsor. تحقق من الـ API key أو من وجود بيانات في الفترة المختارة.")
         if "_meta_api_errors" in st.session_state and st.session_state["_meta_api_errors"]:
             st.write("آخر الأخطاء:", st.session_state["_meta_api_errors"][-3:])
-    else:
-        st.write(f"عدد الصفوف: {len(df_meta)}")
-        st.write(f"الأعمدة الراجعة: {list(df_meta.columns)}")
-        if used_fallback:
-            st.warning("⚠️ تم استخدام أسماء حقول بديلة (purchases/purchase_value/roas) لأن الأسماء الأساسية لم ترجع بيانات.")
-        st.dataframe(df_meta.head(15))
-
-# ─────────────────────────────────────────────
-# Guard
-# ─────────────────────────────────────────────
-if df_meta.empty:
     st.warning(
         "⚠️ لا توجد بيانات متاحة حالياً من Meta عبر Windsor. "
         "تأكد من أن حساب Meta متصل بشكل صحيح على Windsor.ai، وأن الفترة المختارة فيها بيانات."
@@ -179,7 +167,9 @@ if df_meta.empty:
     st.stop()
 
 # ─────────────────────────────────────────────
-# Normalize columns
+# Normalize columns — MUST happen before the Debug table is shown,
+# otherwise nested action fields (e.g. purchase_roas as {"omni_purchase": "1.5"})
+# render as raw "[object Object]" instead of a clean number.
 # ─────────────────────────────────────────────
 NUM_COLS = ["spend", "clicks", "impressions", "reach", "frequency",
             "actions_purchase", "action_values_purchase", "purchase_roas",
@@ -197,6 +187,16 @@ if purchases_col:
     df_meta["_purchases"] = df_meta[purchases_col]
 else:
     df_meta["_purchases"] = 0
+
+# ─────────────────────────────────────────────
+# Debug panel — shown AFTER normalization, so values are clean numbers
+# ─────────────────────────────────────────────
+with st.expander("🔍 Debug — البيانات الراجعة من Windsor (تأكد من الـ field names)"):
+    st.write(f"عدد الصفوف: {len(df_meta)}")
+    st.write(f"الأعمدة الراجعة: {list(df_meta.columns)}")
+    if used_fallback:
+        st.warning("⚠️ تم استخدام أسماء حقول بديلة (purchases/purchase_value/roas) لأن الأسماء الأساسية لم ترجع بيانات.")
+    st.dataframe(df_meta.head(15))
 
 if purchase_value_col:
     df_meta["_purchase_value"] = df_meta[purchase_value_col]
