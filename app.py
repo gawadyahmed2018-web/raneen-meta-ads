@@ -99,7 +99,12 @@ with st.sidebar:
         custom_to = st.date_input("To", date.today() - timedelta(days=1))
 
     st.markdown("---")
-    level = st.radio("Reporting Level", ["campaign", "adset", "ad"], format_func=lambda x: x.title())
+    level_label = st.radio("Reporting Level", ["Campaign", "Ad Set", "Ad"])
+    # Map UI label -> actual Windsor/Facebook field name.
+    # Confirmed via live API error: "adset"/"ad" are NOT valid field names —
+    # Facebook requires "adset_name" / "ad_name" (campaign stays as "campaign").
+    LEVEL_FIELD_MAP = {"Campaign": "campaign", "Ad Set": "adset_name", "Ad": "ad_name"}
+    level = LEVEL_FIELD_MAP[level_label]
 
     st.markdown("---")
     st.caption("⚠️ هذه الأرقام مصدرها Meta مباشرة — لو شايف فرق بينها وبين GA4 dashboard، ده طبيعي ومتوقع (راجع شرح الفجوة).")
@@ -126,30 +131,21 @@ st.markdown(f"""
 
 # ─────────────────────────────────────────────
 # Load campaign-level data
-# Field names below are the documented Windsor Meta connector basics
-# (account_name, campaign, spend, clicks, impressions, date) plus
-# commonly-used action fields. Anything Windsor doesn't recognize
-# simply returns empty/missing — verified live via the Debug panel below.
+# Field names confirmed live against the actual Windsor/Facebook API.
+# "purchase_roas", "roas", "purchases", "purchase_value" do NOT exist as
+# fields on this connector (confirmed via a live 400 error response) — only
+# actions_purchase / action_values_purchase are real. ROAS, CPA, etc. are
+# all computed manually below from spend + these two fields.
 # ─────────────────────────────────────────────
 BASE_FIELDS = ["date", "account_name", "campaign", "spend", "clicks", "impressions", "reach", "frequency"]
-ACTION_FIELDS = ["actions_purchase", "action_values_purchase", "purchase_roas"]
-
-ALT_ACTION_FIELDS = ["purchases", "purchase_value", "roas"]  # fallback names to try if the above return nothing
+ACTION_FIELDS = ["actions_purchase", "action_values_purchase"]
 
 
 @st.cache_data(ttl=300, show_spinner="Loading Meta Ads data...")
 def load_meta_campaigns(preset, d_from, d_to, lvl):
     field_set = list(dict.fromkeys(BASE_FIELDS + [lvl] + ACTION_FIELDS))
     df = get_meta_data(field_set, preset, d_from, d_to)
-    used_fallback = False
-    if df.empty or not any(c in df.columns for c in ["actions_purchase", "action_values_purchase"]):
-        # Try alternate field names
-        field_set_alt = list(dict.fromkeys(BASE_FIELDS + [lvl] + ALT_ACTION_FIELDS))
-        df_alt = get_meta_data(field_set_alt, preset, d_from, d_to)
-        if not df_alt.empty:
-            df = df_alt
-            used_fallback = True
-    return df, used_fallback
+    return df, False  # second value kept for compatibility with the rest of the app
 
 
 df_meta, used_fallback = load_meta_campaigns(date_preset, _d_from, _d_to, level)
@@ -170,25 +166,16 @@ if df_meta.empty:
 
 # ─────────────────────────────────────────────
 # Normalize columns — MUST happen before the Debug table is shown,
-# otherwise nested action fields (e.g. purchase_roas as {"omni_purchase": "1.5"})
-# render as raw "[object Object]" instead of a clean number.
+# so any nested objects render as clean numbers, not "[object Object]".
 # ─────────────────────────────────────────────
 NUM_COLS = ["spend", "clicks", "impressions", "reach", "frequency",
-            "actions_purchase", "action_values_purchase", "purchase_roas",
-            "purchases", "purchase_value", "roas"]
+            "actions_purchase", "action_values_purchase"]
 for c in NUM_COLS:
     if c in df_meta.columns:
         df_meta[c] = df_meta[c].apply(safe_num)
 
-# Unify field names regardless of which set was used
-purchases_col = "actions_purchase" if "actions_purchase" in df_meta.columns else ("purchases" if "purchases" in df_meta.columns else None)
-purchase_value_col = "action_values_purchase" if "action_values_purchase" in df_meta.columns else ("purchase_value" if "purchase_value" in df_meta.columns else None)
-roas_col = "purchase_roas" if "purchase_roas" in df_meta.columns else ("roas" if "roas" in df_meta.columns else None)
-
-if purchases_col:
-    df_meta["_purchases"] = df_meta[purchases_col]
-else:
-    df_meta["_purchases"] = 0
+df_meta["_purchases"] = df_meta["actions_purchase"] if "actions_purchase" in df_meta.columns else 0
+df_meta["_purchase_value"] = df_meta["action_values_purchase"] if "action_values_purchase" in df_meta.columns else 0
 
 # ─────────────────────────────────────────────
 # Debug panel — shown AFTER normalization, so values are clean numbers
@@ -196,14 +183,7 @@ else:
 with st.expander("🔍 Debug — البيانات الراجعة من Windsor (تأكد من الـ field names)"):
     st.write(f"عدد الصفوف: {len(df_meta)}")
     st.write(f"الأعمدة الراجعة: {list(df_meta.columns)}")
-    if used_fallback:
-        st.warning("⚠️ تم استخدام أسماء حقول بديلة (purchases/purchase_value/roas) لأن الأسماء الأساسية لم ترجع بيانات.")
     st.dataframe(df_meta.head(15))
-
-if purchase_value_col:
-    df_meta["_purchase_value"] = df_meta[purchase_value_col]
-else:
-    df_meta["_purchase_value"] = 0
 
 if level not in df_meta.columns:
     st.error(f"العمود '{level}' غير موجود في البيانات الراجعة. الأعمدة المتاحة: {list(df_meta.columns)}")
@@ -275,7 +255,7 @@ st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
 # ─────────────────────────────────────────────
 # Campaign Performance Table
 # ─────────────────────────────────────────────
-st.markdown(section_header(f"{level.title()} Performance", "Full breakdown", "#1877F2"), unsafe_allow_html=True)
+st.markdown(section_header(f"{level_label} Performance", "Full breakdown", "#1877F2"), unsafe_allow_html=True)
 
 agg_cols = {c: "sum" for c in ["spend", "clicks", "impressions", "_purchases", "_purchase_value"] if c in df_meta.columns}
 df_lvl = df_meta.groupby(level, as_index=False).agg(agg_cols)
@@ -300,7 +280,7 @@ if not df_lvl.empty:
             f"<td>{badge}</td></tr>"
         )
     st.markdown(
-        f"<table class='styled-table'><thead><tr><th>{level.title()}</th><th>Spend</th><th>Clicks</th>"
+        f"<table class='styled-table'><thead><tr><th>{level_label}</th><th>Spend</th><th>Clicks</th>"
         f"<th>Purchases</th><th>Revenue</th><th>ROAS</th><th>CPA</th><th>Rating</th></tr></thead>"
         f"<tbody>{''.join(rows)}</tbody></table>",
         unsafe_allow_html=True,
