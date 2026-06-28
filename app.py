@@ -105,6 +105,8 @@ with st.sidebar:
     # Facebook requires "adset_name" / "ad_name" (campaign stays as "campaign").
     LEVEL_FIELD_MAP = {"Campaign": "campaign", "Ad Set": "adset_name", "Ad": "ad_name"}
     level = LEVEL_FIELD_MAP[level_label]
+    if level_label in ("Ad Set", "Ad"):
+        st.caption(f"⏳ مستوى {level_label} فيه بيانات أكتر تفصيلاً — التحميل ممكن ياخد لحد دقيقة.")
 
     st.markdown("---")
     st.caption("⚠️ هذه الأرقام مصدرها Meta مباشرة — لو شايف فرق بينها وبين GA4 dashboard، ده طبيعي ومتوقع (راجع شرح الفجوة).")
@@ -141,10 +143,13 @@ BASE_FIELDS = ["date", "account_name", "campaign", "spend", "clicks", "impressio
 ACTION_FIELDS = ["actions_purchase", "action_values_purchase"]
 
 
-@st.cache_data(ttl=300, show_spinner="Loading Meta Ads data...")
+@st.cache_data(ttl=300, show_spinner="Loading Meta Ads data... قد يستغرق دقيقة في مستوى Ad Set / Ad")
 def load_meta_campaigns(preset, d_from, d_to, lvl):
     field_set = list(dict.fromkeys(BASE_FIELDS + [lvl] + ACTION_FIELDS))
-    df = get_meta_data(field_set, preset, d_from, d_to)
+    # Ad Set and Ad level return far more rows than Campaign level —
+    # Meta's API takes noticeably longer to aggregate and return them.
+    req_timeout = 120 if lvl in ("adset_name", "ad_name") else 60
+    df = get_meta_data(field_set, preset, d_from, d_to, timeout=req_timeout)
     return df, False  # second value kept for compatibility with the rest of the app
 
 
