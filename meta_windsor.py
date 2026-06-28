@@ -32,7 +32,7 @@ def _preset_to_dates(preset):
     return str(df), str(dt)
 
 
-def get_meta_data(fields, date_preset="last_30d", date_from=None, date_to=None, timeout=30, extra_params=None):
+def get_meta_data(fields, date_preset="last_30d", date_from=None, date_to=None, timeout=90, extra_params=None):
     """
     Fetch data directly from the Meta (Facebook) Ads connector on Windsor.
 
