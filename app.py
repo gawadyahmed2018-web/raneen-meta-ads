@@ -181,18 +181,29 @@ def load_devices(preset, d_from, d_to, src):
 
 @st.cache_data(ttl=300, show_spinner=False)
 def load_page_performance(preset, d_from, d_to, src):
-    df1 = get_windsor_data(["page_path", "sessions", "screen_page_views", "bounce_rate"], preset, d_from, d_to, source=src)
-    df2 = get_windsor_data(["page_path", "average_session_duration", "purchase_revenue", "transactions"], preset, d_from, d_to, source=src)
-    if df1.empty and df2.empty:
+    # Fetch each field group separately so an invalid/renamed field on
+    # Windsor's side doesn't silently kill the entire request and leave
+    # the whole page-performance section empty. page_path + sessions is
+    # confirmed working live; the rest are merged in only if available.
+    df_base = get_windsor_data(["page_path", "sessions"], preset, d_from, d_to, source=src)
+    if df_base.empty:
         return pd.DataFrame()
-    if df1.empty:
-        return df2
-    if df2.empty:
-        return df1
-    try:
-        return pd.merge(df1, df2, on=["page_path", "source"], how="outer")
-    except Exception:
-        return df1
+
+    result = df_base
+
+    for extra_fields in (
+        ["page_path", "bounce_rate"],
+        ["page_path", "average_session_duration"],
+        ["page_path", "purchase_revenue", "transactions"],
+    ):
+        df_extra = get_windsor_data(extra_fields, preset, d_from, d_to, source=src)
+        if not df_extra.empty:
+            try:
+                result = pd.merge(result, df_extra, on=["page_path", "source"], how="left")
+            except Exception:
+                pass  # keep going with what we already have
+
+    return result
 
 
 @st.cache_data(ttl=300, show_spinner=False)
